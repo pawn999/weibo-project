@@ -1,30 +1,37 @@
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 const axios = require('axios');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
+
+// 确保上传目录存在
+const uploadsDir = path.join(__dirname, 'uploads');
+const avatarsDir = path.join(__dirname, 'avatars');
+fs.mkdirSync(uploadsDir, { recursive: true });
+fs.mkdirSync(avatarsDir, { recursive: true });
 
 app.use(cors());
 app.use(express.json());
 
 // ========== 静态文件 ==========
 app.use(express.static(path.join(__dirname, '..', 'client')));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-app.use('/avatars', express.static(path.join(__dirname, 'avatars')));
+app.use('/uploads', express.static(uploadsDir));
+app.use('/avatars', express.static(avatarsDir));
 
 // ========== Multer 头像 & 图片 ==========
 const storage = multer.diskStorage({
-  destination: path.join(__dirname, 'uploads'),
+  destination: uploadsDir,
   filename(req, file, cb) {
     const ext = path.extname(file.originalname);
     cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
   },
 });
 const avatarStorage = multer.diskStorage({
-  destination: path.join(__dirname, 'avatars'),
+  destination: avatarsDir,
   filename(req, file, cb) {
     const ext = path.extname(file.originalname);
     cb(null, `avatar-${Date.now()}${ext}`);
