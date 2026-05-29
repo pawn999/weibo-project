@@ -36,14 +36,13 @@ axios.interceptors.request.use((config) => {
       ],
       notifications: [],
       nextId: 5, nextCommentId: 4, nextNotifId: 1, nextUserId: 4,
+      _tokens: {},
     };
   }
 
-  let S = null;
-  function store() { if (!S) { const r = localStorage.getItem(KEY); S = r ? JSON.parse(r) : seed(); } return S; }
-  function save() { localStorage.setItem(KEY, JSON.stringify(S)); }
-
-  const T = {}; // tokens
+  let S = null, T = {};
+  function store() { if (!S) { const r = localStorage.getItem(KEY); S = r ? JSON.parse(r) : seed(); T = S._tokens || {}; } return S; }
+  function save() { S._tokens = T; localStorage.setItem(KEY, JSON.stringify(S)); }
   function user() { return S._curUser || null; }
   function uid() { return user() ? user().username : null; }
 
@@ -73,7 +72,7 @@ axios.interceptors.request.use((config) => {
 
   async function handleMock(config) {
     const s = store();
-    const url = config.url;
+    let url = (config.url || '').replace(/^https?:\/\/[^/]+/, '');
     const method = (config.method || 'get').toUpperCase();
 
     // Parse body
