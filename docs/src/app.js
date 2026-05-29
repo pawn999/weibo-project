@@ -328,25 +328,14 @@ axios.interceptors.request.use((config) => {
     }
   }
 
-  // Register interceptor — fall back to mock whenever real API is unreachable
-  axios.interceptors.response.use(
-    async function (r) {
-      // Success but content is HTML (GitHub Pages 404 page), not our JSON API
-      if (r.data && typeof r.data === 'string' && r.data.includes('<!DOCTYPE')) {
-        const result = await handleMock(r.config);
-        if (result) return result;
-      }
-      return r;
-    },
-    async function (error) {
-      // Any error (network error, 404, etc.) — try mock
-      try {
-        const result = await handleMock(error.config);
-        if (result) return result;
-      } catch (_) {}
-      throw error;
-    }
-  );
+  // 直接替换 axios 方法（比拦截器更可靠）
+  if (location.hostname.includes('github.io') || location.protocol === 'file:') {
+    function wrapData(d) { return d instanceof FormData ? d : (typeof d === 'string' ? d : JSON.stringify(d)); }
+    axios.get = async function (url, config) { return handleMock({ url, method: 'get', headers: (config || {}).headers || {} }); };
+    axios.post = async function (url, data, config) { return handleMock({ url, method: 'post', headers: (config || {}).headers || {}, data: wrapData(data) }); };
+    axios.put = async function (url, data, config) { return handleMock({ url, method: 'put', headers: (config || {}).headers || {}, data: wrapData(data) }); };
+    axios.delete = async function (url, config) { return handleMock({ url, method: 'delete', headers: (config || {}).headers || {} }); };
+  }
 })();
 
 // ========== 工具 ==========
