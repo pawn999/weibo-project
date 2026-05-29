@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>微博 - 随时随地发现新鲜事</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://unpkg.com/vue-router@4/dist/vue-router.global.prod.js"></script>
+  <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+  <style>
+    /* ========== 全局样式 ========== */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+        'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+      background-color: #f5f5f5;
+      color: #333;
+      min-height: 100vh;
+    }
+
+    /* ========== 顶部导航栏 ========== */
+    .navbar {
+      background-color: #e64a2e;
+      color: #fff;
+      padding: 0 20px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .navbar-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .navbar-brand {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: #fff;
+      text-decoration: none;
+    }
+
+    .nav-link {
+      color: rgba(255,255,255,0.85);
+      text-decoration: none;
+      font-size: 14px;
+      padding: 6px 12px;
+      border-radius: 16px;
+      transition: background-color 0.2s;
+    }
+
+    .nav-link:hover,
+    .nav-link.active {
+      background-color: rgba(255,255,255,0.2);
+      color: #fff;
+    }
+
+    .navbar-right {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .navbar-user {
+      font-size: 14px;
+      font-weight: 600;
+      color: #fff;
+      margin-right: 4px;
+    }
+
+    .navbar-subtitle {
+      font-size: 13px;
+      opacity: 0.85;
+    }
+
+    /* ========== 主容器 ========== */
+    .container {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 20px 16px;
+    }
+
+    /* ========== 发布表单卡片 ========== */
+    .post-form-card {
+      background: #fff;
+      border-radius: 8px;
+      padding: 18px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    }
+
+    .post-form-card textarea {
+      width: 100%;
+      height: 100px;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      padding: 12px;
+      font-size: 15px;
+      resize: vertical;
+      font-family: inherit;
+      transition: border-color 0.2s;
+      line-height: 1.6;
+    }
+
+    .post-form-card textarea:focus {
+      outline: none;
+      border-color: #e64a2e;
+      box-shadow: 0 0 0 2px rgba(230, 74, 46, 0.1);
+    }
+
+    .post-form-card textarea::placeholder { color: #bbb; }
+
+    .form-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 12px;
+    }
+
+    .form-footer-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn-upload {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: none;
+      border: 1px dashed #ccc;
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 13px;
+      color: #999;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+    }
+
+    .btn-upload:hover {
+      border-color: #e64a2e;
+      color: #e64a2e;
+    }
+
+    .btn-upload.has-image {
+      border-color: #4caf50;
+      color: #4caf50;
+      border-style: solid;
+    }
+
+    .char-count {
+      font-size: 13px;
+      color: #999;
+    }
+
+    .char-count.warn { color: #e64a2e; }
+
+    .btn-publish {
+      background-color: #e64a2e;
+      color: #fff;
+      border: none;
+      border-radius: 20px;
+      padding: 8px 24px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.2s, transform 0.1s;
+    }
+
+    .btn-publish:hover { background-color: #d14326; }
+    .btn-publish:active { transform: scale(0.96); }
+    .btn-publish:disabled { background-color: #f0a090; cursor: not-allowed; }
+
+    /* ========== 图片预览 ========== */
+    .image-preview {
+      position: relative;
+      margin-top: 12px;
+      display: inline-block;
+    }
+
+    .image-preview img {
+      max-width: 200px;
+      max-height: 150px;
+      border-radius: 6px;
+      object-fit: cover;
+    }
+
+    .image-preview .btn-remove {
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #333;
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      font-size: 12px;
+      line-height: 22px;
+      text-align: center;
+    }
+
+    /* ========== 帖子卡片 ========== */
+    .post-card {
+      background: #fff;
+      border-radius: 8px;
+      padding: 18px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      transition: box-shadow 0.2s;
+    }
+
+    .post-card:hover { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12); }
+
+    .post-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #e64a2e, #ff7b5a);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 18px;
+      font-weight: 700;
+      margin-right: 10px;
+      flex-shrink: 0;
+    }
+
+    .user-info { display: flex; flex-direction: column; }
+
+    .username {
+      font-size: 15px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .post-time {
+      font-size: 12px;
+      color: #999;
+      margin-top: 2px;
+    }
+
+    .post-content {
+      font-size: 15px;
+      line-height: 1.75;
+      margin-bottom: 14px;
+      word-break: break-word;
+      color: #333;
+    }
+
+    .post-image {
+      margin-bottom: 14px;
+    }
+
+    .post-image img {
+      max-width: 100%;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .post-actions {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      border-top: 1px solid #f0f0f0;
+      padding-top: 12px;
+    }
+
+    .btn-like, .btn-comment {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      color: #999;
+      padding: 4px 8px;
+      border-radius: 4px;
+      transition: color 0.2s, background-color 0.2s;
+      text-decoration: none;
+    }
+
+    .btn-like:hover, .btn-comment:hover { background-color: #fff0ee; }
+    .btn-like.liked { color: #e64a2e; }
+
+    .btn-like .like-icon, .btn-comment .comment-icon {
+      font-size: 18px;
+      transition: transform 0.2s;
+    }
+
+    .btn-like:active .like-icon { transform: scale(1.3); }
+
+    /* ========== 评论预览（首页内联） ========== */
+    .comment-preview {
+      margin-top: 12px;
+      padding: 10px 14px;
+      background-color: #fafafa;
+      border-radius: 6px;
+      border-left: 2px solid #e64a2e;
+    }
+
+    .preview-item {
+      font-size: 13px;
+      line-height: 1.7;
+      color: #555;
+      padding: 4px 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .preview-item + .preview-item {
+      border-top: 1px solid #f0f0f0;
+    }
+
+    .preview-user {
+      color: #e64a2e;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .preview-user:hover { text-decoration: underline; }
+
+    .comment-user { color: #e64a2e; font-weight: 600; text-decoration: none; }
+    .comment-user:hover { text-decoration: underline; }
+
+    .expand-link {
+      display: block;
+      margin-top: 8px;
+      font-size: 13px;
+      color: #e64a2e;
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    .expand-link:hover {
+      text-decoration: underline;
+    }
+
+    /* ========== 登录注册页 ========== */
+    .auth-card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 36px 32px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+      max-width: 400px;
+      margin: 20px auto;
+    }
+
+    .auth-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: #333;
+      text-align: center;
+      margin-bottom: 28px;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .auth-input {
+      width: 100%;
+      padding: 12px 16px;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 15px;
+      font-family: inherit;
+      transition: border-color 0.2s;
+    }
+
+    .auth-input:focus {
+      outline: none;
+      border-color: #e64a2e;
+      box-shadow: 0 0 0 2px rgba(230, 74, 46, 0.1);
+    }
+
+    .auth-input.input-error {
+      border-color: #f44336;
+    }
+
+    .auth-input.input-error:focus {
+      box-shadow: 0 0 0 2px rgba(244, 67, 54, 0.1);
+    }
+
+    .field-hint {
+      font-size: 12px;
+      color: #f44336;
+      margin-top: 4px;
+      padding-left: 4px;
+    }
+
+    .auth-submit {
+      width: 100%;
+      background-color: #e64a2e;
+      color: #fff;
+      border: none;
+      border-radius: 24px;
+      padding: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: background-color 0.2s;
+    }
+
+    .auth-submit:hover { background-color: #d14326; }
+    .auth-submit:disabled { background-color: #f0a090; cursor: not-allowed; }
+
+    .auth-switch {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 14px;
+      color: #999;
+    }
+
+    .auth-switch a {
+      color: #e64a2e;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    /* ========== 登录提示卡片 ========== */
+    .login-prompt-card {
+      background: #fff;
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 16px;
+      text-align: center;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    }
+
+    .login-prompt-card p {
+      font-size: 15px;
+      color: #666;
+      margin-bottom: 14px;
+    }
+
+    .login-prompt-card a {
+      color: #e64a2e;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    /* ========== 通知铃铛 ========== */
+    .notif-bell {
+      position: relative;
+      font-size: 20px;
+      cursor: pointer;
+      margin-right: 8px;
+      user-select: none;
+    }
+
+    .notif-badge {
+      position: absolute;
+      top: -6px;
+      right: -8px;
+      background: #fff;
+      color: #e64a2e;
+      font-size: 11px;
+      font-weight: 700;
+      min-width: 16px;
+      height: 16px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 4px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+
+    /* ========== 通知面板 ========== */
+    .notif-panel {
+      position: fixed;
+      top: 56px;
+      right: 20px;
+      width: 340px;
+      max-height: 420px;
+      overflow-y: auto;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+      z-index: 150;
+    }
+
+    .notif-panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 16px;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .notif-close {
+      background: none;
+      border: none;
+      font-size: 20px;
+      cursor: pointer;
+      color: #999;
+    }
+
+    .notif-empty {
+      padding: 40px 16px;
+      text-align: center;
+      color: #999;
+      font-size: 14px;
+    }
+
+    .notif-item {
+      padding: 12px 16px;
+      border-bottom: 1px solid #f5f5f5;
+    }
+
+    .notif-item.unread {
+      background-color: #fff8f6;
+    }
+
+    .notif-text {
+      font-size: 14px;
+      color: #333;
+      margin-bottom: 4px;
+    }
+
+    .notif-meta {
+      font-size: 12px;
+      color: #999;
+      margin-bottom: 4px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .notif-link {
+      font-size: 12px;
+      color: #e64a2e;
+      text-decoration: none;
+    }
+
+    /* ========== 帖子操作菜单 ========== */
+    .post-menu {
+      margin-left: auto;
+      display: flex;
+      gap: 4px;
+    }
+
+    .btn-icon {
+      background: none;
+      border: none;
+      font-size: 15px;
+      cursor: pointer;
+      padding: 4px;
+      opacity: 0.5;
+      transition: opacity 0.2s;
+    }
+
+    .btn-icon:hover {
+      opacity: 1;
+    }
+
+    /* ========== 编辑模式 ========== */
+    .edit-textarea {
+      width: 100%;
+      height: 90px;
+      border: 1px solid #e64a2e;
+      border-radius: 6px;
+      padding: 10px;
+      font-size: 15px;
+      font-family: inherit;
+      resize: vertical;
+      line-height: 1.6;
+    }
+
+    .edit-textarea:focus {
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(230,74,46,0.1);
+    }
+
+    .edit-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .btn-save, .btn-cancel {
+      border: none;
+      border-radius: 16px;
+      padding: 6px 16px;
+      font-size: 13px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .btn-save {
+      background: #e64a2e;
+      color: #fff;
+    }
+
+    .btn-save:disabled {
+      background: #f0a090;
+      cursor: not-allowed;
+    }
+
+    .btn-cancel {
+      background: #f0f0f0;
+      color: #666;
+    }
+
+    /* ========== 话题标签 ========== */
+    .hashtag {
+      color: #e64a2e;
+      cursor: pointer;
+      font-weight: 500;
+    }
+
+    .hashtag:hover {
+      text-decoration: underline;
+    }
+
+    /* ========== Emoji 面板 ========== */
+    .btn-emoji {
+      background: none;
+      border: 1px dashed #ccc;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    .btn-emoji:hover {
+      border-color: #e64a2e;
+    }
+
+    .btn-emoji-small {
+      border: none;
+      padding: 4px 6px;
+    }
+
+    .emoji-picker {
+      margin-top: 10px;
+      background: #fafafa;
+      border: 1px solid #eee;
+      border-radius: 8px;
+      padding: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      max-height: 180px;
+      overflow-y: auto;
+    }
+
+    .emoji-item {
+      font-size: 20px;
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 4px;
+      transition: background 0.15s;
+    }
+
+    .emoji-item:hover {
+      background: #e64a2e20;
+    }
+
+    /* ========== 骨架屏 ========== */
+    .skeleton {
+      animation: shimmer 1.5s infinite;
+    }
+
+    @keyframes shimmer {
+      0% { opacity: 1; }
+      50% { opacity: 0.5; }
+      100% { opacity: 1; }
+    }
+
+    .skeleton-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .skeleton-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: #e0e0e0;
+      margin-right: 10px;
+    }
+
+    .skeleton-lines {
+      flex: 1;
+    }
+
+    .skeleton-line {
+      height: 14px;
+      background: #e0e0e0;
+      border-radius: 4px;
+      margin-bottom: 8px;
+    }
+
+    .skeleton-line.short { width: 120px; }
+    .skeleton-line.medium { width: 60%; }
+    .skeleton-line.tiny { width: 80px; height: 10px; }
+
+    /* ========== 点赞弹跳动画 ========== */
+    .btn-like .like-icon {
+      transition: transform 0.2s;
+      display: inline-block;
+    }
+
+    .btn-like.like-pop .like-icon {
+      animation: likePop 0.3s ease;
+    }
+
+    @keyframes likePop {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.4); }
+      100% { transform: scale(1); }
+    }
+
+    /* ========== 新帖滑入 ========== */
+    .post-card.post-new {
+      animation: slideIn 0.4s ease;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-16px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* ========== 帖子详情页 ========== */
+    .detail-header {
+      margin-bottom: 16px;
+    }
+
+    .btn-back {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      color: #e64a2e;
+      text-decoration: none;
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+
+    .btn-back:hover { text-decoration: underline; }
+
+    .section-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #333;
+    }
+
+    /* ========== 评论表单 ========== */
+    .comment-form-card {
+      background: #fff;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    }
+
+    .comment-input-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .comment-input-row input {
+      flex: 1;
+      border: 1px solid #e0e0e0;
+      border-radius: 20px;
+      padding: 10px 16px;
+      font-size: 14px;
+      font-family: inherit;
+      transition: border-color 0.2s;
+    }
+
+    .comment-input-row input:focus {
+      outline: none;
+      border-color: #e64a2e;
+    }
+
+    .btn-comment-submit {
+      background-color: #e64a2e;
+      color: #fff;
+      border: none;
+      border-radius: 20px;
+      padding: 8px 20px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background-color 0.2s;
+    }
+
+    .btn-comment-submit:hover { background-color: #d14326; }
+    .btn-comment-submit:disabled { background-color: #f0a090; cursor: not-allowed; }
+
+    /* ========== 评论列表 ========== */
+    .comment-card {
+      background: #fff;
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-bottom: 8px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    }
+
+    .comment-card .comment-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+
+    .comment-card .comment-user {
+      font-size: 14px;
+      font-weight: 600;
+      color: #e64a2e;
+    }
+
+    .comment-card .comment-time {
+      font-size: 12px;
+      color: #999;
+    }
+
+    .comment-body {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .comment-card .comment-content {
+      font-size: 14px;
+      line-height: 1.6;
+      color: #444;
+      flex: 1;
+    }
+
+    .btn-delete-comment {
+      background: none;
+      border: none;
+      color: #ccc;
+      font-size: 18px;
+      cursor: pointer;
+      padding: 0 4px;
+      line-height: 1;
+      transition: color 0.15s;
+      flex-shrink: 0;
+    }
+
+    .btn-delete-comment:hover {
+      color: #f44336;
+    }
+
+    /* ========== 空状态 ========== */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #999;
+    }
+
+    .empty-state .icon { font-size: 56px; margin-bottom: 16px; }
+    .empty-state p { font-size: 15px; }
+
+    .empty-small {
+      text-align: center;
+      padding: 30px 0;
+      color: #bbb;
+      font-size: 14px;
+    }
+
+    /* ========== 加载状态 ========== */
+    .loading {
+      text-align: center;
+      padding: 40px 20px;
+      color: #999;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 32px;
+      height: 32px;
+      border: 3px solid #f0f0f0;
+      border-top-color: #e64a2e;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ========== Toast 提示 ========== */
+    .toast {
+      position: fixed;
+      top: 72px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 10px 24px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 500;
+      z-index: 200;
+      animation: toastIn 0.3s ease;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .toast.success { background-color: #4caf50; color: #fff; }
+    .toast.error { background-color: #f44336; color: #fff; }
+
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateX(-50%) translateY(-12px); }
+      to { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+
+    /* ========== 底部导航 ========== */
+    .bottom-nav {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: #fff;
+      border-top: 1px solid #eee;
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      height: 56px;
+      z-index: 100;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    .bottom-nav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-decoration: none;
+      color: #999;
+      font-size: 11px;
+      gap: 2px;
+      padding: 4px 12px;
+    }
+
+    .bottom-nav-item.active { color: #e64a2e; }
+    .bn-icon { font-size: 20px; }
+    .bn-icon-wrap { position: relative; display: inline-block; }
+    .bn-badge {
+      position: absolute; top: -6px; right: -10px;
+      background: #f44336; color: #fff;
+      font-size: 10px; font-weight: 700;
+      min-width: 16px; height: 16px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      padding: 0 4px;
+    }
+
+    .container { padding-bottom: 80px; }
+
+    /* ========== 搜索栏 ========== */
+    .search-bar {
+      display: flex; gap: 8px; margin-bottom: 16px;
+    }
+    .search-input {
+      flex: 1; padding: 10px 16px; border: 1px solid #e0e0e0; border-radius: 20px; font-size: 15px; font-family: inherit;
+    }
+    .search-input:focus { outline: none; border-color: #e64a2e; }
+    .btn-search {
+      background: #e64a2e; color: #fff; border: none; border-radius: 20px; padding: 8px 20px; font-size: 14px; font-weight: 600; cursor: pointer;
+    }
+    .search-info { font-size: 14px; color: #999; margin-bottom: 12px; }
+
+    /* ========== 热搜榜 ========== */
+    .hot-list { background: #fff; border-radius: 8px; padding: 8px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .hot-item { display: flex; align-items: center; padding: 10px 16px; cursor: pointer; transition: background 0.15s; gap: 10px; }
+    .hot-item:hover { background: #fafafa; }
+    .hot-rank { font-size: 16px; font-weight: 700; color: #999; width: 24px; text-align: center; }
+    .hot-rank.top3 { color: #e64a2e; }
+    .hot-word { flex: 1; font-size: 14px; color: #333; }
+    .hot-num { font-size: 12px; color: #bbb; }
+    .refresh-btn { font-size: 12px; color: #e64a2e; cursor: pointer; margin-left: 8px; font-weight: 400; }
+
+    /* ========== 个人页 ========== */
+    .profile-card { background: #fff; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .profile-header { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+    .avatar-upload { position: relative; cursor: pointer; }
+    .profile-avatar { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; }
+    .avatar-change-hint { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.5); color: #fff; font-size: 11px; text-align: center; padding: 3px 0; border-radius: 0 0 36px 36px; opacity: 0; transition: opacity 0.2s; }
+    .avatar-upload:hover .avatar-change-hint { opacity: 1; }
+    .profile-name { font-size: 18px; font-weight: 700; }
+    .profile-username { font-size: 13px; color: #999; margin-top: 2px; }
+    .profile-bio { font-size: 14px; color: #666; margin-top: 6px; }
+    .btn-edit-profile { background: none; border: 1px solid #e64a2e; color: #e64a2e; border-radius: 16px; padding: 6px 20px; font-size: 13px; cursor: pointer; font-weight: 600; }
+
+    /* ========== 关注按钮 & 粉丝统计 ========== */
+    .profile-stats { display: flex; gap: 20px; font-size: 14px; color: #666; margin-bottom: 14px; }
+    .profile-stats strong { color: #333; }
+    .btn-follow { background: #e64a2e; color: #fff; border: none; border-radius: 16px; padding: 6px 24px; font-size: 14px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+    .btn-follow.following { background: #fff; color: #999; border: 1px solid #ddd; }
+    .btn-follow:hover { opacity: 0.9; }
+
+    /* ========== 用户名链接 ========== */
+    .username { text-decoration: none; color: #333; }
+    .username:hover { color: #e64a2e; text-decoration: underline; }
+    .edit-panel { background: #fff; border-radius: 8px; padding: 20px; margin-top: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .edit-panel h3 { margin-bottom: 14px; font-size: 16px; }
+    .edit-panel .form-group { margin-bottom: 12px; }
+    .edit-panel label { font-size: 13px; color: #999; display: block; margin-bottom: 4px; }
+
+    /* ========== 消息页 ========== */
+    .msg-item {
+      background: #fff; border-radius: 8px; padding: 14px 16px; margin-bottom: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06); font-size: 14px; line-height: 1.6;
+    }
+    .msg-meta { color: #999; font-size: 12px; display: block; margin-top: 4px; }
+
+    .msg-item-link {
+      display: block;
+      text-decoration: none;
+      color: inherit;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .msg-item-link:hover {
+      background: #fafafa;
+    }
+
+    .msg-arrow {
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #ccc;
+      font-size: 16px;
+      transition: color 0.15s;
+    }
+
+    .msg-item-link:hover .msg-arrow {
+      color: #e64a2e;
+    }
+
+    /* ========== 转发复选框 ========== */
+    .comment-extra { margin-top: 8px; }
+    .repost-label { font-size: 13px; color: #999; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+    .repost-label input { accent-color: #e64a2e; }
+
+    /* ========== 响应式 ========== */
+    @media (max-width: 480px) {
+      .container { padding: 12px 10px; }
+      .navbar { padding: 0 12px; height: 48px; }
+      .navbar-brand { font-size: 18px; }
+      .comment-input-row { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- 顶部导航 -->
+    <nav class="navbar">
+      <router-link to="/" class="navbar-brand">微博</router-link>
+      <div class="navbar-right">
+        <div v-if="user" class="notif-bell" @click="toggleNotifPanel">
+          🔔<span v-if="unreadCount > 0" class="notif-badge">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
+        </div>
+        <template v-if="user">
+          <span class="navbar-user">{{ user.nickname || user.username }}</span>
+          <a href="#" class="nav-link" @click.prevent="logout">退出</a>
+        </template>
+        <template v-else>
+          <router-link to="/login" class="nav-link">登录</router-link>
+        </template>
+      </div>
+    </nav>
+
+    <!-- 通知面板 -->
+    <div v-if="showNotifPanel" class="notif-panel">
+      <div class="notif-panel-header"><strong>通知</strong><button class="notif-close" @click="showNotifPanel = false">&times;</button></div>
+      <div v-if="notifications.length === 0" class="notif-empty">暂无通知</div>
+      <div v-for="n in notifications" :key="n.id" class="notif-item" :class="{ unread: !n.read }">
+        <div class="notif-text"><strong>{{ n.fromUser }}</strong><template v-if="n.type === 'like'"> 赞了你的微博</template><template v-else> 评论了：{{ n.commentContent }}</template></div>
+        <router-link :to="'/post/' + n.postId" class="notif-link" @click="showNotifPanel = false">查看</router-link>
+      </div>
+    </div>
+
+    <!-- 路由视图 -->
+    <div class="container">
+      <router-view v-slot="{ Component }">
+        <component :is="Component" :posts="posts"></component>
+      </router-view>
+    </div>
+
+    <!-- Toast -->
+    <div v-if="toast.message" class="toast" :class="toast.type">{{ toast.message }}</div>
+
+    <!-- 底部导航 -->
+    <nav class="bottom-nav">
+      <router-link to="/" class="bottom-nav-item" active-class="active"><span class="bn-icon">🏠</span><span>首页</span></router-link>
+      <router-link to="/discover" class="bottom-nav-item" active-class="active"><span class="bn-icon">🔍</span><span>发现</span></router-link>
+      <router-link to="/messages" class="bottom-nav-item" active-class="active">
+        <span class="bn-icon-wrap">💬<span v-if="unreadCount > 0" class="bn-badge">{{ unreadCount > 99 ? '99+' : unreadCount }}</span></span>
+        <span>消息</span>
+      </router-link>
+      <router-link to="/profile" class="bottom-nav-item" active-class="active"><span class="bn-icon">👤</span><span>我</span></router-link>
+    </nav>
+  </div>
+
+  <script src="src/app.js"></script>
+</body>
+</html>
