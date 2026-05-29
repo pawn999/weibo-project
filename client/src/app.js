@@ -10,6 +10,342 @@ axios.interceptors.request.use((config) => {
   return config;
 });
 
+// ========== 离线演示模式（后端不可达时自动切换） ==========
+(function () {
+  const KEY = 'weibo_demo';
+
+  function seed() {
+    const now = new Date().toISOString();
+    const h = (n) => new Date(Date.now() - n * 3600000).toISOString();
+    return {
+      users: [
+        { id: 1, username: 'demo', nickname: 'Demo用户', bio: '这是一个演示账号', avatar: null, password: '123456', followers: ['微博新人', '读书人'], following: ['微博新人'] },
+        { id: 2, username: '微博新人', nickname: '微博小白', bio: '刚来微博，请多关照', avatar: null, password: '123456', followers: ['demo'], following: ['demo'] },
+        { id: 3, username: '读书人', nickname: '爱读书的程序员', bio: '书中自有黄金屋 📚', avatar: null, password: '123456', followers: ['demo'], following: [] },
+      ],
+      posts: [
+        { id: 1, content: '欢迎来到微博平台！🎉 这是离线演示模式，所有数据都保存在你的浏览器中。你可以注册新账号、发微博、评论、点赞、关注～', image: null, username: 'demo', likes: 5, likedBy: ['微博新人', '读书人'], createdAt: h(1), comments: [
+          { id: 1, content: '太棒了！终于能用啦～', username: '微博新人', createdAt: h(0.5) },
+          { id: 2, content: '这个Demo做得不错！', username: '读书人', createdAt: h(0.3) },
+        ] },
+        { id: 2, content: '今天天气真好，适合出去走走。#好天气 #心情', image: null, username: '微博新人', likes: 3, likedBy: ['demo'], createdAt: h(3), comments: [
+          { id: 3, content: '心情超好！刚跑完步回来～', username: '读书人', createdAt: h(2) },
+        ] },
+        { id: 3, content: '刚看完一本好书，推荐给大家——《活着》。#读书 #好书推荐', image: null, username: '读书人', likes: 8, likedBy: ['demo', '微博新人'], createdAt: h(6), comments: [] },
+        { id: 4, content: '分享一个前端小技巧：使用 CSS Grid 可以轻松实现复杂的布局，比 Flexbox 更强大！', image: null, username: 'demo', likes: 12, likedBy: [], createdAt: h(12), comments: [] },
+      ],
+      notifications: [],
+      nextId: 5, nextCommentId: 4, nextNotifId: 1, nextUserId: 4,
+    };
+  }
+
+  let S = null;
+  function store() { if (!S) { const r = localStorage.getItem(KEY); S = r ? JSON.parse(r) : seed(); } return S; }
+  function save() { localStorage.setItem(KEY, JSON.stringify(S)); }
+
+  const T = {}; // tokens
+  function user() { return S._curUser || null; }
+  function uid() { return user() ? user().username : null; }
+
+  function ok(d, m) { return { status: 200, statusText: 'OK', headers: {}, config: {}, data: { code: 200, data: d, message: m || 'ok' } }; }
+  function created(d, m) { return { status: 201, statusText: 'Created', headers: {}, config: {}, data: { code: 201, data: d, message: m || 'created' } }; }
+  function e(code, m) { return Promise.reject({ response: { status: code, data: { code, message: m } } }); }
+
+  function fmtPosts(list) {
+    const u = uid();
+    return list.map(p => ({ ...p, liked: u ? p.likedBy.includes(u) : false }));
+  }
+
+  function addNotif(type, fromUser, toUser, postId, postContent, commentContent) {
+    if (fromUser === toUser) return;
+    S.notifications.push({ id: S.nextNotifId++, type, fromUser, toUser, postId, postContent: (postContent || '').slice(0, 50), commentContent: commentContent || null, read: false, createdAt: new Date().toISOString() });
+    save();
+  }
+
+  function readDataURL(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleMock(config) {
+    const s = store();
+    const url = config.url;
+    const method = (config.method || 'get').toUpperCase();
+
+    // Parse body
+    let body = {};
+    if (config.data) {
+      if (typeof config.data === 'string') { try { body = JSON.parse(config.data); } catch (_) {} }
+      else if (config.data instanceof FormData) { body._formData = config.data; }
+      else { body = config.data; }
+    }
+    const token = ((config.headers && config.headers.Authorization) || '').replace('Bearer ', '');
+    S._curUser = T[token] ? S.users.find(u => u.id === T[token]) || null : null;
+
+    try {
+      // ===== GET =====
+      if (method === 'GET') {
+        if (url === '/api/posts') {
+          const sorted = [...s.posts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+          return ok(fmtPosts(sorted));
+        }
+        if (url.startsWith('/api/posts/')) {
+          const id = parseInt(url.split('/api/posts/')[1], 10);
+          const p = s.posts.find(x => x.id === id);
+          if (!p) return e(404, '帖子不存在');
+          return ok(fmtPosts([p])[0]);
+        }
+        if (url === '/api/user') {
+          if (!user()) return e(401, '未登录');
+          return ok({ id: user().id, username: user().username, nickname: user().nickname, bio: user().bio, avatar: user().avatar });
+        }
+        if (url === '/api/notifications') {
+          if (!user()) return e(401, '请先登录');
+          const list = s.notifications.filter(n => n.toUser === uid()).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+          return ok(list);
+        }
+        if (url.startsWith('/api/users/')) {
+          const username = url.split('/api/users/')[1].split('/')[0];
+          const u = s.users.find(x => x.username === username);
+          if (!u) return e(404, '用户不存在');
+          const userPosts = s.posts.filter(p => p.username === u.username).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+          return ok({
+            username: u.username, nickname: u.nickname, bio: u.bio, avatar: u.avatar,
+            followersCount: u.followers.length, followingCount: u.following.length,
+            isFollowed: user() ? u.followers.includes(uid()) : false,
+            posts: fmtPosts(userPosts),
+          });
+        }
+        if (url.startsWith('/api/search')) {
+          const q = (new URLSearchParams(url.split('?')[1] || '')).get('q') || '';
+          if (!q) return ok([]);
+          const kw = q.toLowerCase();
+          const results = s.posts.filter(p => p.content.toLowerCase().includes(kw) || p.username.toLowerCase().includes(kw));
+          results.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+          return ok(fmtPosts(results));
+        }
+        if (url === '/api/news') {
+          return ok([
+            { word: '微博离线演示', hot: 4892034 }, { word: 'Vue 3 前端实战', hot: 3829102 },
+            { word: 'Express API 设计', hot: 2981034 }, { word: 'GitHub Pages', hot: 2567890 },
+            { word: '现代Web课程', hot: 2123456 }, { word: '前端热门话题', hot: 1890234 },
+            { word: 'JavaScript技巧', hot: 1654321 }, { word: '周末去哪儿玩', hot: 1432109 },
+            { word: '好书推荐', hot: 1287654 }, { word: '程序员的日常', hot: 1102938 },
+          ]);
+        }
+      }
+
+      // ===== POST =====
+      if (method === 'POST') {
+        if (url === '/api/login') {
+          const u = s.users.find(x => x.username === body.username && x.password === body.password);
+          if (!u) return e(401, '用户名或密码错误');
+          const token = Math.random().toString(36).substring(2) + Date.now().toString(36);
+          T[token] = u.id;
+          return ok({ id: u.id, username: u.username, nickname: u.nickname, bio: u.bio, avatar: u.avatar, token }, '登录成功');
+        }
+        if (url === '/api/register') {
+          const { username, password } = body;
+          if (!username || username.trim().length < 2 || username.trim().length > 12) return e(400, '用户名需 2-12 个字符');
+          if (!password || password.length < 6) return e(400, '密码不能少于 6 位');
+          if (s.users.find(x => x.username === username.trim())) return e(400, '用户名已存在');
+          const nu = { id: s.nextUserId++, username: username.trim(), nickname: username.trim(), bio: '', avatar: null, password, followers: [], following: [] };
+          s.users.push(nu);
+          const token = Math.random().toString(36).substring(2) + Date.now().toString(36);
+          T[token] = nu.id;
+          S._curUser = nu;
+          save();
+          return created({ id: nu.id, username: nu.username, nickname: nu.nickname, token }, '注册成功');
+        }
+        if (url === '/api/posts') {
+          if (!user()) return e(401, '请先登录');
+          const { content, image } = body;
+          if (!content || !content.trim()) return e(400, '内容不能为空');
+          if (content.length > 280) return e(400, '内容不能超过280字');
+          const np = { id: s.nextId++, content: content.trim(), image: image || null, username: uid(), likes: 0, likedBy: [], createdAt: new Date().toISOString(), comments: [] };
+          s.posts.push(np);
+          save();
+          return created(np, '发布成功');
+        }
+        if (url.startsWith('/api/posts/') && url.endsWith('/like')) {
+          if (!user()) return e(401, '请先登录');
+          const id = parseInt(url.split('/api/posts/')[1].split('/')[0], 10);
+          const p = s.posts.find(x => x.id === id);
+          if (!p) return e(404, '帖子不存在');
+          const idx = p.likedBy.indexOf(uid());
+          if (idx === -1) { p.likedBy.push(uid()); p.likes++; }
+          else { p.likedBy.splice(idx, 1); p.likes--; }
+          addNotif('like', uid(), p.username, p.id, p.content);
+          save();
+          return ok({ ...p, liked: idx === -1 }, idx === -1 ? '点赞成功' : '已取消点赞');
+        }
+        if (url.startsWith('/api/posts/') && url.endsWith('/comments')) {
+          if (!user()) return e(401, '请先登录');
+          const id = parseInt(url.split('/api/posts/')[1].split('/')[0], 10);
+          const p = s.posts.find(x => x.id === id);
+          if (!p) return e(404, '帖子不存在');
+          const { content, repost } = body;
+          if (!content || !content.trim()) return e(400, '评论内容不能为空');
+          if (content.length > 200) return e(400, '评论不能超过200字');
+          const nc = { id: s.nextCommentId++, content: content.trim(), username: uid(), createdAt: new Date().toISOString() };
+          p.comments.push(nc);
+          addNotif('comment', uid(), p.username, p.id, p.content, content.trim());
+          let repostPost = null;
+          if (repost) {
+            repostPost = { id: s.nextId++, content: '评论了 @' + p.username + ' 的微博：' + content.trim(), image: null, username: uid(), likes: 0, likedBy: [], createdAt: new Date().toISOString(), comments: [] };
+            s.posts.push(repostPost);
+          }
+          save();
+          return created({ comment: nc, repostPost }, '评论成功' + (repost ? '，已转发' : ''));
+        }
+        if (url.startsWith('/api/users/') && url.endsWith('/follow')) {
+          if (!user()) return e(401, '请先登录');
+          const targetUsername = url.split('/api/users/')[1].split('/')[0];
+          const tu = s.users.find(x => x.username === targetUsername);
+          if (!tu) return e(404, '用户不存在');
+          if (tu.username === uid()) return e(400, '不能关注自己');
+          if (tu.followers.includes(uid())) return e(400, '已关注');
+          tu.followers.push(uid());
+          user().following.push(tu.username);
+          save();
+          return ok({ followersCount: tu.followers.length }, '关注成功');
+        }
+        if (url === '/api/upload') {
+          if (!user()) return e(401, '请先登录');
+          if (body._formData) {
+            const file = body._formData.get('image');
+            if (file && file instanceof File) {
+              try {
+                const dataUrl = await readDataURL(file);
+                return ok({ url: dataUrl }, '上传成功');
+              } catch (_) { return e(400, '图片读取失败'); }
+            }
+          }
+          return e(400, '请选择图片文件');
+        }
+        if (url === '/api/user/avatar') {
+          if (!user()) return e(401, '请先登录');
+          if (body._formData) {
+            const file = body._formData.get('avatar');
+            if (file && file instanceof File) {
+              try {
+                const dataUrl = await readDataURL(file);
+                user().avatar = dataUrl;
+                save();
+                return ok({ avatar: dataUrl }, '头像已更新');
+              } catch (_) { return e(400, '图片读取失败'); }
+            }
+          }
+          return e(400, '请选择图片');
+        }
+      }
+
+      // ===== PUT =====
+      if (method === 'PUT') {
+        if (url === '/api/user/profile') {
+          if (!user()) return e(401, '请先登录');
+          const { nickname, bio } = body;
+          if (nickname !== undefined) {
+            if (!nickname.trim() || nickname.trim().length < 2 || nickname.trim().length > 12) return e(400, '昵称需 2-12 个字符');
+            user().nickname = nickname.trim();
+          }
+          if (bio !== undefined) {
+            if (bio.length > 100) return e(400, '简介不能超过 100 字');
+            user().bio = bio;
+          }
+          save();
+          return ok({ id: user().id, username: user().username, nickname: user().nickname, bio: user().bio, avatar: user().avatar }, '资料已更新');
+        }
+        if (url.startsWith('/api/posts/')) {
+          const id = parseInt(url.split('/api/posts/')[1], 10);
+          const p = s.posts.find(x => x.id === id);
+          if (!p) return e(404, '帖子不存在');
+          if (!user()) return e(401, '请先登录');
+          if (p.username !== uid()) return e(403, '只能编辑自己的帖子');
+          const { content } = body;
+          if (!content || !content.trim()) return e(400, '内容不能为空');
+          if (content.length > 280) return e(400, '内容不能超过280字');
+          p.content = content.trim();
+          save();
+          return ok(p, '编辑成功');
+        }
+        if (url === '/api/notifications/read') {
+          if (!user()) return e(401, '请先登录');
+          s.notifications.forEach(n => { if (n.toUser === uid()) n.read = true; });
+          save();
+          return ok(null, '已全部标为已读');
+        }
+      }
+
+      // ===== DELETE =====
+      if (method === 'DELETE') {
+        if (url.startsWith('/api/posts/') && url.includes('/comments/')) {
+          const parts = url.split('/api/posts/')[1].split('/comments/');
+          const postId = parseInt(parts[0], 10);
+          const commentId = parseInt(parts[1], 10);
+          const p = s.posts.find(x => x.id === postId);
+          if (!p) return e(404, '帖子不存在');
+          if (!user()) return e(401, '请先登录');
+          const ci = p.comments.findIndex(c => c.id === commentId);
+          if (ci === -1) return e(404, '评论不存在');
+          if (p.comments[ci].username !== uid()) return e(403, '只能删除自己的评论');
+          p.comments.splice(ci, 1);
+          save();
+          return ok(null, '评论已删除');
+        }
+        if (url.startsWith('/api/posts/')) {
+          const id = parseInt(url.split('/api/posts/')[1], 10);
+          const pi = s.posts.findIndex(x => x.id === id);
+          if (pi === -1) return e(404, '帖子不存在');
+          if (!user()) return e(401, '请先登录');
+          if (s.posts[pi].username !== uid()) return e(403, '只能删除自己的帖子');
+          s.posts.splice(pi, 1);
+          save();
+          return ok(null, '帖子已删除');
+        }
+        if (url.startsWith('/api/users/') && url.endsWith('/follow')) {
+          if (!user()) return e(401, '请先登录');
+          const targetUsername = url.split('/api/users/')[1].split('/')[0];
+          const tu = s.users.find(x => x.username === targetUsername);
+          if (!tu) return e(404, '用户不存在');
+          const fi = tu.followers.indexOf(uid());
+          if (fi === -1) return e(400, '未关注');
+          tu.followers.splice(fi, 1);
+          const fgi = user().following.indexOf(tu.username);
+          if (fgi !== -1) user().following.splice(fgi, 1);
+          save();
+          return ok({ followersCount: tu.followers.length }, '已取消关注');
+        }
+      }
+
+      // Unhandled route
+      return null; // let the real error propagate
+    } catch (err) {
+      return e(500, '服务器内部错误');
+    }
+  }
+
+  // Register interceptor — fall back to mock on network error
+  axios.interceptors.response.use(
+    function (r) { return r; },
+    async function (error) {
+      if (!error.response || error.code === 'ERR_NETWORK') {
+        try {
+          const result = await handleMock(error.config);
+          if (result) return result;
+        } catch (_) {
+          throw error;
+        }
+      }
+      throw error;
+    }
+  );
+})();
+
 // ========== 工具 ==========
 const EMOJIS = [
   '😀','😂','🤣','😍','🥰','😘','😜','🤪','😎','🤩',
