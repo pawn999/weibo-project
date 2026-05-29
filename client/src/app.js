@@ -329,18 +329,22 @@ axios.interceptors.request.use((config) => {
     }
   }
 
-  // Register interceptor — fall back to mock on network error
+  // Register interceptor — fall back to mock whenever real API is unreachable
   axios.interceptors.response.use(
-    function (r) { return r; },
-    async function (error) {
-      if (!error.response || error.code === 'ERR_NETWORK') {
-        try {
-          const result = await handleMock(error.config);
-          if (result) return result;
-        } catch (_) {
-          throw error;
-        }
+    async function (r) {
+      // Success but content is HTML (GitHub Pages 404 page), not our JSON API
+      if (r.data && typeof r.data === 'string' && r.data.includes('<!DOCTYPE')) {
+        const result = await handleMock(r.config);
+        if (result) return result;
       }
+      return r;
+    },
+    async function (error) {
+      // Any error (network error, 404, etc.) — try mock
+      try {
+        const result = await handleMock(error.config);
+        if (result) return result;
+      } catch (_) {}
       throw error;
     }
   );
