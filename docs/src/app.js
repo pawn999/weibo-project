@@ -331,10 +331,16 @@ axios.interceptors.request.use((config) => {
   // 直接替换 axios 方法（比拦截器更可靠）
   if (location.hostname.includes('github.io') || location.protocol === 'file:') {
     function wrapData(d) { return d instanceof FormData ? d : (typeof d === 'string' ? d : JSON.stringify(d)); }
-    axios.get = async function (url, config) { return handleMock({ url, method: 'get', headers: (config || {}).headers || {} }); };
-    axios.post = async function (url, data, config) { return handleMock({ url, method: 'post', headers: (config || {}).headers || {}, data: wrapData(data) }); };
-    axios.put = async function (url, data, config) { return handleMock({ url, method: 'put', headers: (config || {}).headers || {}, data: wrapData(data) }); };
-    axios.delete = async function (url, config) { return handleMock({ url, method: 'delete', headers: (config || {}).headers || {} }); };
+    function getHeaders(config) {
+      var h = Object.assign({}, (config || {}).headers || {});
+      var token = localStorage.getItem('token');
+      if (token) h.Authorization = 'Bearer ' + token;
+      return h;
+    }
+    axios.get = async function (url, config) { return handleMock({ url, method: 'get', headers: getHeaders(config) }); };
+    axios.post = async function (url, data, config) { return handleMock({ url, method: 'post', headers: getHeaders(config), data: wrapData(data) }); };
+    axios.put = async function (url, data, config) { return handleMock({ url, method: 'put', headers: getHeaders(config), data: wrapData(data) }); };
+    axios.delete = async function (url, config) { return handleMock({ url, method: 'delete', headers: getHeaders(config) }); };
   }
 })();
 
